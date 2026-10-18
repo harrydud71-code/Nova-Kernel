@@ -11,6 +11,13 @@ export ARCH=arm64
 export LLVM=-11
 export LLVM_IAS=1
 
+# Older kernel Makefiles invoke unversioned LLVM binutils even when LLVM=-11.
+if [[ -x /usr/bin/llvm-ar-11 ]]; then
+  LLVM11_BIN="$(mktemp -d)"
+  for tool in ar nm objdump objcopy; do ln -sf "/usr/bin/llvm-${tool}-11" "$LLVM11_BIN/llvm-${tool}"; done
+  export PATH="$LLVM11_BIN:$PATH"
+fi
+
 make -C "$ROOT" O="$OUT" vendor/a52sxq_eur_open_defconfig
 make -C "$ROOT" O="$OUT" -j"$JOBS"
 test -s "$OUT/arch/arm64/boot/Image"
