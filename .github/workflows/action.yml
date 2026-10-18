@@ -72,18 +72,21 @@ jobs:
           make -j$JOBS O="$OUT"
           
           # Prepare AnyKernel3
-          PKG="$OUT_DIR/gki_pkg"
+                    PKG="$OUT_DIR/gki_pkg"
           mkdir -p "$PKG"
-          cp "$OUT/arch/arm64/boot/Image" "$PKG/Image"
-          cp "$OUT/arch/arm64/boot/dtbo.img" "$PKG/dtbo.img"
-          cp "$OUT/arch/arm64/boot/dts/vendor/qcom/yupik.dtb" "$PKG/dtb"
+
+          cp "$OUT_DIR/arch/arm64/boot/Image" "$PKG/Image"
+          cp "$OUT_DIR/arch/arm64/boot/dtbo.img" "$PKG/dtbo.img"
+          cp "$OUT_DIR/arch/arm64/boot/dts/vendor/qcom/yupik.dtb" "$PKG/dtb"
           cp -r "$ANYKERNEL"/* "$PKG/"
+
           sed -i '/flash_boot()/,/}/c\
 flash_boot() {\
     write_boot "$1/Image" "$2";\
     write_boot "$1/dtbo.img" "$2";\
     write_boot "$1/dtb" "$2";\
 }' "$PKG/anykernel.sh"
+
           cd "$PKG"
           zip -r "../RIO_GKI_${DEVICE}.zip" *
           cd "$SRC_DIR"
