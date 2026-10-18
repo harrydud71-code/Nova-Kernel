@@ -1,128 +1,80 @@
-name: Full Kernel Build (GKI + KSU)
+name: NovaKernel A52s Build Validation
 
 on:
   workflow_dispatch:
     inputs:
       device:
-        description: "Device codename"
+        description: "Target device"
         required: true
-        default: "a73xq"
+        default: "a52sxq"
         type: choice
         options:
-          - a73xq
           - a52sxq
-          - m52xq
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-
-    env:
-      SRC_DIR: ${{ github.workspace }}
-      OUT_DIR: ${{ github.workspace }}/out
-      TC_DIR: ${{ github.workspace }}/toolchains
-      ANYKERNEL: ${{ github.workspace }}/AnyKernel3
-      JOBS: ${{ runner.cores }}
-
+    timeout-minutes: 180
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          ref: ${{ github.ref }}
+          fetch-depth: 1
 
-      - name: Install system dependencies
+      - name: Install build dependencies
         run: |
-          sudo apt update
-          sudo apt install -y git device-tree-compiler lz4 xz-utils zlib1g-dev openjdk-17-jdk gcc g++ \
-            python3 python-is-python3 p7zip-full android-sdk-libsparse-utils erofs-utils \
-            default-jdk gnupg flex bison gperf build-essential zip curl libc6-dev \
-            libncurses-dev libx11-dev libreadline-dev libgl1 libgl1-mesa-dev make bc \
-            grep tofrodos python3-markdown libxml2-utils xsltproc zlib1g-dev libtinfo6 \
-            make repo cpio kmod openssl libelf-dev pahole libssl-dev libarchive-tools zstd rsync --fix-missing
-          wget http://security.ubuntu.com/ubuntu/pool/universe/n/ncurses/libtinfo5_6.3-2ubuntu0.1_amd64.deb
-          sudo dpkg -i libtinfo5_6.3-2ubuntu0.1_amd64.deb
-          rm -f libtinfo5_6.3-2ubuntu0.1_amd64.deb
+          sudo apt-get update
+          sudo apt-get install -y bc bison build-essential flex git libelf-dev libssl-dev lld make python3 python-is-python3 rsync
+          sudo apt-get install -y device-tree-compiler libncurses-dev zlib1g-dev
 
-      - name: Install Clang
+      - name: Verify target configuration and root integration status
         run: |
-          CLANGVER="clang-r530567"
-          CLANG_DIR="$TC_DIR/$CLANGVER"
-          CLANG_BIN="$CLANG_DIR/bin"
-          mkdir -p "$CLANG_DIR"
-          wget -q https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/$CLANGVER.tar.gz -O "$TC_DIR/$CLANGVER.tar.gz"
-          tar xf "$TC_DIR/$CLANGVER.tar.gz" -C "$CLANG_DIR"
-          rm "$TC_DIR/$CLANGVER.tar.gz"
-          echo "$CLANG_BIN" >> $GITHUB_PATH
-
-      - name: Fetch AnyKernel3
-        run: |
-          if [[ ! -d "$ANYKERNEL" ]]; then
-            git clone https://github.com/osm0sis/AnyKernel3.git "$ANYKERNEL"
+          test -f arch/arm64/configs/vendor/a52sxq_eur_open_defconfig
+          echo "Target defconfig exists: vendor/a52sxq_eur_open_defconfig"
+          if grep -R -n -E 'CONFIG_KSU=y|CONFIG_KSU_SUSFS=y|CONFIG_KSU_SUSFS' --include='Kconfig' --include='Makefile' --include='*.c' --include='*.h' --include='*defconfig' .; then
+            echo "Found possible KernelSU/SUSFS references; inspect build output before packaging."
+          else
+            echo "::warning::No obvious in-tree KernelSU/SUSFS integration found. This run validates the A52s kernel build only; it will NOT create a flashable ZIP."
           fi
 
-      - name: Build Kernel GKI
+      - name: Install Clang toolchain
         run: |
-          git switch main
-          DEVICE="${{ github.event.inputs.device }}"
-          OUT="$OUT_DIR/gki"
-          mkdir -p "$OUT"
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/clang"
+          CLANGVER="clang-r530567"
+          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/${CLANGVER}.tar.gz" -o "$RUNNER_TEMP/clang.tar.gz"
+          tar -xzf "$RUNNER_TEMP/clang.tar.gz" -C "$RUNNER_TEMP/clang"
+          echo "$RUNNER_TEMP/clang/bin" >> "$GITHUB_PATH"
+          echo "CLANG_BIN=$RUNNER_TEMP/clang/bin" >> "$GITHUB_ENV"
+
+      - name: Configure A52s kernel
+        run: |
+          set -euo pipefail
           export ARCH=arm64
           export LLVM=1
-          make -j$JOBS O="$OUT" rio_defconfig
-          make -j$JOBS O="$OUT"
-          
-          # Prepare AnyKernel3
-          PKG="$OUT_DIR/gki_pkg"
-          mkdir -p "$PKG"
-          cp "$OUT/arch/arm64/boot/Image" "$PKG/Image"
-          cp "$OUT/arch/arm64/boot/dtbo.img" "$PKG/dtbo.img"
-          cp "$OUT/arch/arm64/boot/dts/vendor/qcom/yupik.dtb" "$PKG/dtb"
-          cp -r "$ANYKERNEL"/* "$PKG/"
-          sed -i '/flash_boot()/,/}/c\
-flash_boot() {\
-    write_boot "$1/Image" "$2";\
-    write_boot "$1/dtbo.img" "$2";\
-    write_boot "$1/dtb" "$2";\
-}' "$PKG/anykernel.sh"
-          cd "$PKG"
-          zip -r "../RIO_GKI_${DEVICE}.zip" *
-          cd "$SRC_DIR"
+          export LLVM_IAS=1
+          make O=out vendor/a52sxq_eur_open_defconfig
+          grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN)=' out/.config
 
-      - name: Build Kernel KSU
+      - name: Compile kernel
         run: |
-          git switch susfs-rio
-          DEVICE="${{ github.event.inputs.device }}"
-          OUT="$OUT_DIR/ksu"
-          mkdir -p "$OUT"
-          
-          # Run external KSU setup
-          curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash -s builtin
-
+          set -euo pipefail
           export ARCH=arm64
           export LLVM=1
-          make -j$JOBS O="$OUT" rio_defconfig
-          make -j$JOBS O="$OUT"
+          export LLVM_IAS=1
+          make -j"$(nproc)" O=out
+          test -s out/arch/arm64/boot/Image
+          file out/arch/arm64/boot/Image
+          cp out/arch/arm64/boot/Image "$RUNNER_TEMP/Image-a52sxq"
 
-          # Prepare AnyKernel3
-          PKG="$OUT_DIR/ksu_pkg"
-          mkdir -p "$PKG"
-          cp "$OUT/arch/arm64/boot/Image" "$PKG/Image"
-          cp "$OUT/arch/arm64/boot/dtbo.img" "$PKG/dtbo.img"
-          cp "$OUT/arch/arm64/boot/dts/vendor/qcom/yupik.dtb" "$PKG/dtb"
-          cp -r "$ANYKERNEL"/* "$PKG/"
-          sed -i '/flash_boot()/,/}/c\
-flash_boot() {\
-    write_boot "$1/Image" "$2";\
-    write_boot "$1/dtbo.img" "$2";\
-    write_boot "$1/dtb" "$2";\
-}' "$PKG/anykernel.sh"
-          cd "$PKG"
-          zip -r "../RIO_KSU_${DEVICE}.zip" *
-          cd "$SRC_DIR"
-
-      - name: Upload Artifacts
+      - name: Upload validation artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Kernel-Packages-${{ github.event.inputs.device }}
-          path: |
-            ${{ github.workspace }}/out/*/*.zip
+          name: NovaKernel-A52sxq-Image-UNVERIFIED
+          path: ${{ runner.temp }}/Image-a52sxq
+          if-no-files-found: error
+          retention-days: 7
