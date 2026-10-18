@@ -1,6 +1,18 @@
 name: NovaKernel A52s Build Validation
 
 on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - '.github/workflows/main.yml'
+      - 'build_kernel.sh'
+      - 'arch/arm64/**'
+      - 'drivers/**'
+      - 'fs/**'
+      - 'include/**'
+      - 'kernel/**'
+      - 'Makefile'
   workflow_dispatch:
     inputs:
       device:
@@ -28,7 +40,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex git libelf-dev libssl-dev lld make python3 python-is-python3 rsync
+          sudo apt-get install -y bc bison build-essential flex git libelf-dev libssl-dev lld make python3 python-is-python3 rsync clang-11 llvm-11
           sudo apt-get install -y device-tree-compiler libncurses-dev zlib1g-dev
 
       - name: Verify target configuration and root integration status
@@ -41,15 +53,11 @@ jobs:
             echo "::warning::No obvious in-tree KernelSU/SUSFS integration found. This run validates the A52s kernel build only; it will NOT create a flashable ZIP."
           fi
 
-      - name: Install Clang toolchain
+      - name: Verify Clang toolchain
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/clang"
-          CLANGVER="clang-r530567"
-          curl -fL "https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/main/${CLANGVER}.tar.gz" -o "$RUNNER_TEMP/clang.tar.gz"
-          tar -xzf "$RUNNER_TEMP/clang.tar.gz" -C "$RUNNER_TEMP/clang"
-          echo "$RUNNER_TEMP/clang/bin" >> "$GITHUB_PATH"
-          echo "CLANG_BIN=$RUNNER_TEMP/clang/bin" >> "$GITHUB_ENV"
+          clang-11 --version
+          ld.lld-11 --version
 
       - name: Configure A52s kernel
         run: |
@@ -57,6 +65,8 @@ jobs:
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
+          export CC=clang-11
+          export LD=ld.lld-11
           make O=out vendor/a52sxq_eur_open_defconfig
           grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN)=' out/.config
 
@@ -66,6 +76,8 @@ jobs:
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
+          export CC=clang-11
+          export LD=ld.lld-11
           make -j"$(nproc)" O=out
           test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
@@ -74,7 +86,7 @@ jobs:
       - name: Upload validation artifact
         uses: actions/upload-artifact@v4
         with:
-          name: NovaKernel-A52sxq-Image-UNVERIFIED
+          name: NovaKernel-A52sxq-Image-BUILD-TEST
           path: ${{ runner.temp }}/Image-a52sxq
           if-no-files-found: error
           retention-days: 7
