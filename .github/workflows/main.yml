@@ -63,10 +63,8 @@ jobs:
         run: |
           set -euo pipefail
           export ARCH=arm64
-          export LLVM=1
+          export LLVM=-11
           export LLVM_IAS=1
-          export CC=clang-11
-          export LD=ld.lld-11
           make O=out vendor/a52sxq_eur_open_defconfig
           grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN)=' out/.config
 
@@ -74,10 +72,8 @@ jobs:
         run: |
           set -euo pipefail
           export ARCH=arm64
-          export LLVM=1
+          export LLVM=-11
           export LLVM_IAS=1
-          export CC=clang-11
-          export LD=ld.lld-11
           make -j"$(nproc)" O=out
           test -s out/arch/arm64/boot/Image
           file out/arch/arm64/boot/Image
