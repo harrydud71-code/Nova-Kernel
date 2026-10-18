@@ -1,0 +1,22 @@
+name: A52s NovaKernel Build
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Inspect A52s build configuration
+        run: |
+          echo "Checking A52s-specific kernel files..."
+          test -f build_kernel.sh
+          test -f arch/arm64/configs/vendor/a52sxq_eur_open_defconfig
+          echo "A52s defconfig exists."
+          echo "Build script and config check passed."
