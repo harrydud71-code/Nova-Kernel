@@ -8,7 +8,7 @@ OUT="${OUT:-$ROOT/out}"
 JOBS="${JOBS:-$(nproc)}"
 
 export ARCH=arm64
-export LLVM=1
+export LLVM=-11
 export LLVM_IAS=1
 
 make -C "$ROOT" O="$OUT" vendor/a52sxq_eur_open_defconfig
