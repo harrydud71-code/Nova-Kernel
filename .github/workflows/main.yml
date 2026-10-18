@@ -57,6 +57,9 @@ jobs:
         run: |
           set -euo pipefail
           clang-11 --version
+          llvm-ar-11 --version
+          llvm-nm-11 --version
+          llvm-objdump-11 --version
           ld.lld-11 --version
 
       - name: Configure A52s kernel
