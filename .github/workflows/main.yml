@@ -81,7 +81,7 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
           make O=out vendor/a52sxq_eur_open_defconfig
-          grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN)=' out/.config
+          grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN|SEC_ABC_SPEC_TYPE1)=' out/.config
 
       - name: Compile kernel
         run: |
