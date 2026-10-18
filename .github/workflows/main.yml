@@ -62,14 +62,23 @@ jobs:
           llvm-objdump-11 --version
           ld.lld-11 --version
           mkdir -p "$RUNNER_TEMP/llvm11-bin"
-          for tool in ar nm objdump objcopy; do ln -sf "/usr/bin/llvm-${tool}-11" "$RUNNER_TEMP/llvm11-bin/llvm-${tool}"; done
+          for tool in clang clang++ ld.lld llvm-ar llvm-nm llvm-objdump llvm-objcopy llvm-readelf llvm-strip; do
+            case "$tool" in
+              clang) target=/usr/bin/clang-11 ;;
+              clang++) target=/usr/bin/clang++-11 ;;
+              ld.lld) target=/usr/bin/ld.lld-11 ;;
+              llvm-*) target="/usr/bin/${tool}-11" ;;
+            esac
+            test -x "$target"
+            ln -sf "$target" "$RUNNER_TEMP/llvm11-bin/$tool"
+          done
           echo "$RUNNER_TEMP/llvm11-bin" >> "$GITHUB_PATH"
 
       - name: Configure A52s kernel
         run: |
           set -euo pipefail
           export ARCH=arm64
-          export LLVM=-11
+          export LLVM=1
           export LLVM_IAS=1
           make O=out vendor/a52sxq_eur_open_defconfig
           grep -E 'CONFIG_(SEC_A52SXQ_PROJECT|MACH_A52SXQ_EUR_OPEN)=' out/.config
