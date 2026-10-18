@@ -61,6 +61,9 @@ jobs:
           llvm-nm-11 --version
           llvm-objdump-11 --version
           ld.lld-11 --version
+          mkdir -p "$RUNNER_TEMP/llvm11-bin"
+          for tool in ar nm objdump objcopy; do ln -sf "/usr/bin/llvm-${tool}-11" "$RUNNER_TEMP/llvm11-bin/llvm-${tool}"; done
+          echo "$RUNNER_TEMP/llvm11-bin" >> "$GITHUB_PATH"
 
       - name: Configure A52s kernel
         run: |
