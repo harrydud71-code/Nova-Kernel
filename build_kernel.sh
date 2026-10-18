@@ -8,13 +8,22 @@ OUT="${OUT:-$ROOT/out}"
 JOBS="${JOBS:-$(nproc)}"
 
 export ARCH=arm64
-export LLVM=-11
+export LLVM=1
 export LLVM_IAS=1
 
-# Older kernel Makefiles invoke unversioned LLVM binutils even when LLVM=-11.
-if [[ -x /usr/bin/llvm-ar-11 ]]; then
+# This legacy kernel expects unversioned LLVM tool names. Pin them consistently
+# to LLVM 11 so compiler output and binutils agree on LTO/bitcode formats.
+if [[ -x /usr/bin/clang-11 && -x /usr/bin/llvm-ar-11 ]]; then
   LLVM11_BIN="$(mktemp -d)"
-  for tool in ar nm objdump objcopy; do ln -sf "/usr/bin/llvm-${tool}-11" "$LLVM11_BIN/llvm-${tool}"; done
+  for tool in clang clang++ ld.lld llvm-ar llvm-nm llvm-objdump llvm-objcopy llvm-readelf llvm-strip; do
+    case "$tool" in
+      clang) target=/usr/bin/clang-11 ;;
+      clang++) target=/usr/bin/clang++-11 ;;
+      ld.lld) target=/usr/bin/ld.lld-11 ;;
+      llvm-*) target="/usr/bin/${tool}-11" ;;
+    esac
+    if [[ -x "$target" ]]; then ln -sf "$target" "$LLVM11_BIN/$tool"; fi
+  done
   export PATH="$LLVM11_BIN:$PATH"
 fi
 
