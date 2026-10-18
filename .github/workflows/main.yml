@@ -40,7 +40,7 @@ jobs:
       - name: Install build dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc bison build-essential flex git libelf-dev libssl-dev lld make python3 python-is-python3 rsync clang-11 llvm-11
+          sudo apt-get install -y bc bison build-essential flex git libelf-dev libssl-dev lld make python3 python-is-python3 rsync clang-11 llvm-11 lld-11
           sudo apt-get install -y device-tree-compiler libncurses-dev zlib1g-dev
 
       - name: Verify target configuration and root integration status
