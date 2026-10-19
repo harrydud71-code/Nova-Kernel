@@ -1,0 +1,72 @@
+name: A52s Image Rebuild (KSU/SUSFS Audit Result)
+
+on:
+  push:
+    branches:
+      - actions/a52sxq-ksu-susfs-build
+    paths:
+      - '.github/workflows/a52sxq-image-rebuild.yml'
+      - 'build_kernel.sh'
+      - 'Makefile'
+      - 'arch/arm64/configs/vendor/a52sxq_eur_open_defconfig'
+      - 'drivers/**'
+      - 'fs/**'
+      - 'include/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rebuild-image:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@v4
+        with:
+          ref: actions/a52sxq-ksu-susfs-build
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex build-essential git libssl-dev libelf-dev python3 clang-11 llvm-11 lld-11
+
+      - name: Audit KSU and SUSFS integration
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "=== tracked KSU/SUSFS-related paths ==="
+          git ls-files | grep -Ei '(^|/)(kernelsu|KernelSU|susfs)(/|$)|susfs|ksu' || true
+          echo "=== relevant config flags ==="
+          grep -nEi 'CONFIG_KSU|SUSFS|CONFIG_KPROBES' arch/arm64/configs/vendor/a52sxq_eur_open_defconfig || true
+          if ! git ls-files | grep -Eqi '(^|/)(kernelsu|KernelSU|susfs)(/|$)|susfs'; then
+            echo "::warning::No tracked in-tree KernelSU/SUSFS implementation found. This is an Image-only rebuild, not a KSU/SUSFS-enabled kernel."
+          fi
+
+      - name: Verify kernel version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq '^VERSION = 5$' Makefile
+          grep -Eq '^PATCHLEVEL = 4$' Makefile
+          grep -Eq '^SUBLEVEL = 302$' Makefile
+          echo "Building Linux 5.4.302 Image"
+
+      - name: Build A52s Image
+        run: JOBS=2 ./build_kernel.sh
+
+      - name: Verify and hash Image
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -s out/arch/arm64/boot/Image
+          file out/arch/arm64/boot/Image
+          sha256sum out/arch/arm64/boot/Image
+
+      - name: Upload Image artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaKernel-A52sxq-Image-KSU-SUSFS-AUDIT-ONLY
+          path: out/arch/arm64/boot/Image
+          if-no-files-found: error
+          retention-days: 7
