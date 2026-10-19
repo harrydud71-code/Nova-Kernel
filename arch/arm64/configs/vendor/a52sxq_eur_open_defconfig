@@ -6251,6 +6251,7 @@ CONFIG_SEC_ABC=y
 # Samsung ABC Common Options
 #
 CONFIG_SEC_ABC_COMMON=y
+CONFIG_SEC_ABC_SPEC_TYPE1=y
 
 #
 # Samsung ABC MOTTO Options

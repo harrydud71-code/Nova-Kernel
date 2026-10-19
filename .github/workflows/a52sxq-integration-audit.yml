@@ -1,0 +1,67 @@
+name: A52s Kernel Integration Audit
+
+on:
+  push:
+    branches:
+      - actions/a52sxq-ksu-susfs-build
+    paths:
+      - 'Makefile'
+      - 'build_kernel.sh'
+      - 'arch/arm64/configs/vendor/a52sxq_eur_open_defconfig'
+      - 'drivers/**'
+      - 'fs/**'
+      - 'include/**'
+      - '.github/workflows/a52sxq-integration-audit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    name: Verify 5.4.302 and root integration
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@v4
+
+      - name: Verify target kernel version
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -Eq '^VERSION = 5$' Makefile
+          grep -Eq '^PATCHLEVEL = 4$' Makefile
+          grep -Eq '^SUBLEVEL = 302$' Makefile
+          echo "PASS: source Makefile declares Linux 5.4.302"
+
+      - name: Audit KernelSU and SUSFS source integration
+        shell: bash
+        run: |
+          set -uo pipefail
+          echo "Checking tracked source for KernelSU and SUSFS integration markers..."
+          if grep -RIlE 'KernelSU|CONFIG_KSU|ksu_' --include='Kconfig' --include='Makefile' --include='*.c' --include='*.h' --include='*.sh' . --exclude-dir=.git | head -n 30; then
+            :
+          fi
+          if grep -RIlE 'SUSFS|CONFIG_KSU_SUSFS|susfs_' --include='Kconfig' --include='Makefile' --include='*.c' --include='*.h' --include='*.sh' . --exclude-dir=.git | head -n 30; then
+            :
+          fi
+          if ! grep -RqsE 'CONFIG_KSU=y|CONFIG_KSU=m|CONFIG_KSU_SUSFS=y|CONFIG_KSU_SUSFS=m' arch/arm64/configs; then
+            echo "::warning::KernelSU/SUSFS config flags were not found in the architecture defconfigs."
+          fi
+          echo "Audit is informational: marker hits alone do not prove a working integration."
+
+      - name: Build A52s validation Image
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y bc bison flex build-essential git libssl-dev libelf-dev python3 clang-11 llvm-11 lld-11
+          JOBS=2 ./build_kernel.sh
+
+      - name: Upload validation-only Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: NovaKernel-A52sxq-Integration-Audit-Image
+          path: out/arch/arm64/boot/Image
+          if-no-files-found: error
+          retention-days: 7
